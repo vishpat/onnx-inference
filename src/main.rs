@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use clap::Parser;
 use ndarray::{Axis, Ix3};
 use ort::{
     Error, inputs,
