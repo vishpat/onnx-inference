@@ -90,9 +90,9 @@ async fn main() -> Result<()> {
     let sample_texts = vec![
         "The fox ran into the jungle"
             .to_string(),
-        "The fox towards the forest"
+        "The fox zoomed out of the forest"
             .to_string(),
-        "Little Miss Muffet sat on a tuffet, eating her curds and whey. Along came a spider and sat down beside her and frightened Miss Muffet away."
+        "Little Miss Muffet sat on a tuffet, eating her curds and whey."
             .to_string(),
     ];
 
