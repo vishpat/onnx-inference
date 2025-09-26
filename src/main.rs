@@ -8,23 +8,6 @@ use ort::{
 };
 use tokenizers::Tokenizer;
 
-#[derive(Parser)]
-#[command(name = "onnx-inference")]
-#[command(about = "Convert text to embeddings using all-MiniLM-L6-v2 model")]
-struct Args {
-    /// Input text to convert to embedding
-    #[arg(short, long)]
-    text: String,
-
-    /// Path to the tokenizer file (optional, will download if not provided)
-    #[arg(short = 'k', long)]
-    tokenizer_path: Option<String>,
-
-    /// Path to the model file (optional, will download if not provided)
-    #[arg(short = 'm', long)]
-    model_path: Option<String>,
-}
-
 fn cosine_similarity(embedding1: &[f32], embedding2: &[f32]) -> f32 {
     let dot_product = embedding1
         .iter()
@@ -42,15 +25,15 @@ struct EmbeddingGenerator {
 }
 
 impl EmbeddingGenerator {
-    async fn new(tokenizer_path: Option<String>, model_path: Option<String>) -> Result<Self> {
-        let tokenizer_path = tokenizer_path.unwrap_or("./tokenizer.json".to_string());
+    async fn new() -> Result<Self> {
+        let tokenizer_path = "./tokenizer.json".to_string();
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| anyhow::anyhow!("Failed to load tokenizer: {}", e))?;
 
         let session = Session::builder()?
             .with_optimization_level(GraphOptimizationLevel::Level1)?
             .with_intra_threads(1)?
-            .commit_from_file(model_path.unwrap_or("./model.onnx".to_string()))?;
+            .commit_from_file("./model.onnx".to_string())?;
 
         Ok(Self { tokenizer, session })
     }
@@ -100,10 +83,8 @@ impl EmbeddingGenerator {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
-
     println!("Initializing embedding generator...");
-    let mut generator = EmbeddingGenerator::new(args.tokenizer_path, args.model_path)
+    let mut generator = EmbeddingGenerator::new()
         .await
         .context("Failed to initialize embedding generator")?;
 
