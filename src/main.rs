@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use ndarray::{Array1, Ix2};
+use ndarray::{Axis, Ix3};
 use ort::{
     Error, inputs,
     session::{Session, builder::GraphOptimizationLevel},
@@ -23,6 +23,17 @@ struct Args {
     /// Path to the model file (optional, will download if not provided)
     #[arg(short = 'm', long)]
     model_path: Option<String>,
+}
+
+fn cosine_similarity(embedding1: &[f32], embedding2: &[f32]) -> f32 {
+    let dot_product = embedding1
+        .iter()
+        .zip(embedding2.iter())
+        .map(|(x, y)| x * y)
+        .sum::<f32>();
+    let norm1 = embedding1.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm2 = embedding2.iter().map(|x| x * x).sum::<f32>().sqrt();
+    dot_product / (norm1 * norm2)
 }
 
 struct EmbeddingGenerator {
@@ -57,38 +68,33 @@ impl EmbeddingGenerator {
             .iter()
             .flat_map(|e| e.get_ids().iter().map(|i| *i as i64))
             .collect();
-        println!("Ids: {:?}", ids);
         let mask: Vec<i64> = encodings
             .iter()
             .flat_map(|e| e.get_attention_mask().iter().map(|i| *i as i64))
             .collect();
-        println!("Mask: {:?}", mask);
         let token_type_ids: Vec<i64> = encodings
-            .iter().flat_map(|e| e.get_type_ids().iter().map(|i| *i as i64))
+            .iter()
+            .flat_map(|e| e.get_type_ids().iter().map(|i| *i as i64))
             .collect();
-        println!("Token type ids: {:?}", token_type_ids);
 
         // Convert our flattened arrays into 2-dimensional tensors of shape [N, L].
         let a_ids = TensorRef::from_array_view(([text.len(), padded_token_length], &*ids))?;
-        println!("A ids: {:?}", a_ids);
         let a_mask = TensorRef::from_array_view(([text.len(), padded_token_length], &*mask))?;
-        println!("A mask: {:?}", a_mask);
-        let token_type_ids = TensorRef::from_array_view(([text.len(), padded_token_length], &*token_type_ids))?;
-        println!("Token type ids: {:?}", token_type_ids);
-        // Tokenize the input text
-        let outputs = self.session.run(inputs![a_ids, a_mask, token_type_ids])?;
-        println!("Outputs: {:?}", outputs);
-        let embeddings = outputs[0].try_extract_array::<f32>().unwrap();
-        println!("Embeddings: {:?}", embeddings);
-        Ok(())
-    }
+        let token_type_ids =
+            TensorRef::from_array_view(([text.len(), padded_token_length], &*token_type_ids))?;
 
-    fn normalize_embedding(&self, mut embedding: Array1<f32>) -> Array1<f32> {
-        let norm = embedding.mapv(|x| x * x).sum().sqrt();
-        if norm > 0.0 {
-            embedding /= norm;
+        let outputs = self.session.run(inputs![a_ids, a_mask, token_type_ids])?;
+        let embeddings = outputs[0]
+            .try_extract_array::<f32>()?
+            .into_dimensionality::<Ix3>()
+            .unwrap();
+        let query = embeddings.index_axis(Axis(0), 0);
+        for embedding in embeddings.axis_iter(Axis(0)).skip(1) {
+            let vec1 = query.iter().copied().collect::<Vec<f32>>();
+            let vec2 = embedding.iter().copied().collect::<Vec<f32>>();
+            println!("similarity: {:?}", cosine_similarity(&vec1, &vec2));
         }
-        embedding
+        Ok(())
     }
 }
 
@@ -102,11 +108,11 @@ async fn main() -> Result<()> {
         .context("Failed to initialize embedding generator")?;
 
     let sample_texts = vec![
-        "The quick brown fox jumps over the lazy dog. Ding dong bell. Pussy in the well"
+        "The fox ran into the jungle"
             .to_string(),
-        "The quick brown fox jumps over the lazy dog. Ding dong bell. Pussy in the well"
+        "The fox towards the forest"
             .to_string(),
-        "The quick brown fox jumps over the lazy dog. Ding dong bell. Pussy in the well"
+        "Little Miss Muffet sat on a tuffet, eating her curds and whey. Along came a spider and sat down beside her and frightened Miss Muffet away."
             .to_string(),
     ];
 
