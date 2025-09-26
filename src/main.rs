@@ -57,20 +57,28 @@ impl EmbeddingGenerator {
             .iter()
             .flat_map(|e| e.get_ids().iter().map(|i| *i as i64))
             .collect();
+        println!("Ids: {:?}", ids);
         let mask: Vec<i64> = encodings
             .iter()
             .flat_map(|e| e.get_attention_mask().iter().map(|i| *i as i64))
             .collect();
+        println!("Mask: {:?}", mask);
+        let token_type_ids: Vec<i64> = encodings
+            .iter().flat_map(|e| e.get_type_ids().iter().map(|i| *i as i64))
+            .collect();
+        println!("Token type ids: {:?}", token_type_ids);
 
         // Convert our flattened arrays into 2-dimensional tensors of shape [N, L].
         let a_ids = TensorRef::from_array_view(([text.len(), padded_token_length], &*ids))?;
+        println!("A ids: {:?}", a_ids);
         let a_mask = TensorRef::from_array_view(([text.len(), padded_token_length], &*mask))?;
+        println!("A mask: {:?}", a_mask);
+        let token_type_ids = TensorRef::from_array_view(([text.len(), padded_token_length], &*token_type_ids))?;
+        println!("Token type ids: {:?}", token_type_ids);
         // Tokenize the input text
-        let outputs = self.session.run(inputs![a_ids, a_mask])?;
-        let embeddings = outputs[1]
-            .try_extract_array::<f32>()?
-            .into_dimensionality::<Ix2>()
-            .unwrap();
+        let outputs = self.session.run(inputs![a_ids, a_mask, token_type_ids])?;
+        println!("Outputs: {:?}", outputs);
+        let embeddings = outputs[0].try_extract_array::<f32>().unwrap();
         println!("Embeddings: {:?}", embeddings);
         Ok(())
     }
